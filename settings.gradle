@@ -1,0 +1,2 @@
+rootProject.name='GB28181Client'
+include ':app'
