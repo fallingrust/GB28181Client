@@ -17,7 +17,7 @@ public class PSmuxer {
         return PSheader;
     }
     public static byte[] GetPESHeader(int paylaodlen,int streamType,long times){
-        byte[] PESHeader=new byte[19];
+        byte[] PESHeader=new byte[14];
         byte[] header=getPESHeader(0,paylaodlen,streamType,times);
         System.arraycopy(header,0,PESHeader,0,PESHeader.length);
         return PESHeader;

@@ -335,7 +335,7 @@ public class MyService extends Service implements SipProviderListener {
         }
         return result;
     }
-
+    private long pts;
     class SendMediaThread extends Thread{
         @SuppressLint("HandlerLeak")
         @Override
@@ -371,26 +371,26 @@ public class MyService extends Service implements SipProviderListener {
                                 }
                                 Log.e(TAG, "handleMessage: "+list.size()+"" );
                                 byte[] psH;
-                                if(list.size()==3 || list.size() ==2){
+                                if(list.size()==3){
                                     psH=PSmuxer.GetPSHeader(0,time,1);
                                 }else{
                                     psH=PSmuxer.GetPSHeader(0,time,0);
                                 }
-                                byte[] Temp = new byte[psH.length + 19 * list.size() + raw.length];
+                                byte[] Temp = new byte[psH.length + 14 * list.size() + raw.length];
                                 byte[] startcode = new byte[] { 0x00, 0x00, 0x00, 0x01 };
-
+                                long pts = 132 + 1000000 * cseq / 25 ;
                                 switch (list.size())
                                 {
                                     case 1:
-                                        byte[] pesh = PSmuxer.GetPESHeader(list.get(0).length + startcode.length,0,time);
+                                        byte[] pesh = PSmuxer.GetPESHeader(list.get(0).length + startcode.length,0,pts);
                                         System.arraycopy(psH, 0, Temp, 0, psH.length);
                                         System.arraycopy(pesh, 0, Temp, psH.length, pesh.length);
                                         System.arraycopy(startcode, 0, Temp, psH.length + pesh.length, startcode.length);
                                         System.arraycopy(list.get(0), 0, Temp, psH.length + pesh.length + 4, list.get(0).length);
                                         break;
                                     case 2:
-                                        byte[] pesh_SPS = PSmuxer.GetPESHeader(list.get(0).length + startcode.length, 0, time);
-                                        byte[] pesh_PPS = PSmuxer.GetPESHeader( list.get(1).length + startcode.length, 0, time);
+                                        byte[] pesh_SPS = PSmuxer.GetPESHeader(list.get(0).length + startcode.length, 0, pts);
+                                        byte[] pesh_PPS = PSmuxer.GetPESHeader( list.get(1).length + startcode.length, 0, pts);
                                         System.arraycopy(psH, 0, Temp, 0, psH.length);
                                         System.arraycopy(pesh_SPS, 0, Temp, psH.length, pesh_SPS.length);
                                         System.arraycopy(startcode, 0, Temp, psH.length + pesh_SPS.length, startcode.length);
@@ -400,9 +400,9 @@ public class MyService extends Service implements SipProviderListener {
                                         System.arraycopy(list.get(1), 0, Temp, psH.length + pesh_SPS.length + 4 + list.get(0).length + pesh_PPS.length + 4, list.get(1).length);
                                         break;
                                     case 3:
-                                        byte[] pesH_SPS = PSmuxer.GetPESHeader( list.get(0).length + startcode.length, 0, time);
-                                        byte[] pesH_PPS = PSmuxer.GetPESHeader( list.get(1).length + startcode.length, 0, time);
-                                        byte[] pesH_RAW = PSmuxer.GetPESHeader( list.get(2).length + startcode.length, 0, time);
+                                        byte[] pesH_SPS = PSmuxer.GetPESHeader( list.get(0).length + startcode.length, 0, pts);
+                                        byte[] pesH_PPS = PSmuxer.GetPESHeader( list.get(1).length + startcode.length, 0, pts);
+                                        byte[] pesH_RAW = PSmuxer.GetPESHeader( list.get(2).length + startcode.length, 0, pts);
                                         System.arraycopy(psH, 0, Temp, 0, psH.length);
                                         System.arraycopy(pesH_SPS, 0, Temp, psH.length, pesH_SPS.length);
                                         System.arraycopy(startcode, 0, Temp, psH.length + pesH_SPS.length, startcode.length);

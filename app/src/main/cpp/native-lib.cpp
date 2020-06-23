@@ -22,7 +22,7 @@
 #define PS_HDR_LEN  14
 #define SYS_HDR_LEN 18
 #define PSM_HDR_LEN 24
-#define PES_HDR_LEN 19
+#define PES_HDR_LEN 14
 #define RTP_HDR_LEN 12
 #define RTP_VERSION 2
 #define RTP_MAX_PACKET_BUFF 1460
@@ -171,12 +171,12 @@ int gb28181_make_sys_header(char* pData)
     bits_write(&bitsBuffer, 8, 0xC0);         /*stream_id*/
     bits_write(&bitsBuffer, 2, 3);          /*marker_bit */
     bits_write(&bitsBuffer, 1, 0);            /*PSTD_buffer_bound_scale*/
-    bits_write(&bitsBuffer, 13, 512);          /*PSTD_buffer_size_bound*/
+    bits_write(&bitsBuffer, 13, 1024);          /*PSTD_buffer_size_bound*/
     /*video stream bound*/
     bits_write(&bitsBuffer, 8, 0xE0);         /*stream_id*/
-    bits_write(&bitsBuffer, 2, 0);          /*marker_bit */
+    bits_write(&bitsBuffer, 2, 3);          /*marker_bit */
     bits_write(&bitsBuffer, 1, 0);          /*PSTD_buffer_bound_scale*/
-    bits_write(&bitsBuffer, 13, 0x80);       /*PSTD_buffer_size_bound*/
+    bits_write(&bitsBuffer, 13, 128);       /*PSTD_buffer_size_bound*/
     return 0;
 }
 /***
@@ -218,7 +218,15 @@ int gb28181_make_psm_header(char* pData)
     bits_write(&bitsBuffer, 8, 0xF4);   /*crc (0~7) bits*/
     return 0;
 }
+static long long get_timestamp()
+{
+    long long time_stamp;
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    time_stamp = ((tv.tv_sec * 1000) + (tv.tv_usec/1000));
 
+    return time_stamp;
+}
 /***
  *@remark:   pes头的封装,里面的具体数据的填写已经占位，可以参考标准
  *@param :   pData      [in] 填充ps头数据的地址
@@ -240,7 +248,7 @@ int gb28181_make_pes_header(char* pData, int stream_id, int payload_len, unsigne
     /*system header*/
     bits_write(&bitsBuffer, 24, 0x000001);  /*start code*/
     bits_write(&bitsBuffer, 8, (stream_id)); /*streamID*/
-    bits_write(&bitsBuffer, 16, (payload_len)+13);  /*packet_len*/ //指出pes分组中数据长度和该字节后的长度和
+    bits_write(&bitsBuffer, 16, (payload_len)+8);  /*packet_len*/ //指出pes分组中数据长度和该字节后的长度和
     bits_write(&bitsBuffer, 2, 2);    /*'10'*/
     bits_write(&bitsBuffer, 2, 0);    /*scrambling_control*/
     bits_write(&bitsBuffer, 1, 0);    /*priority*/
@@ -248,18 +256,19 @@ int gb28181_make_pes_header(char* pData, int stream_id, int payload_len, unsigne
     bits_write(&bitsBuffer, 1, 0);    /*copyright*/
     bits_write(&bitsBuffer, 1, 0);    /*original_or_copy*/
     bits_write(&bitsBuffer, 1, 1);    /*PTS_flag*/
-    bits_write(&bitsBuffer, 1, 1);    /*DTS_flag*/
+    bits_write(&bitsBuffer, 1, 0);    /*DTS_flag*/
     bits_write(&bitsBuffer, 1, 0);    /*ESCR_flag*/
     bits_write(&bitsBuffer, 1, 0);    /*ES_rate_flag*/
     bits_write(&bitsBuffer, 1, 0);    /*DSM_trick_mode_flag*/
     bits_write(&bitsBuffer, 1, 0);    /*additional_copy_info_flag*/
     bits_write(&bitsBuffer, 1, 0);    /*PES_CRC_flag*/
     bits_write(&bitsBuffer, 1, 0);    /*PES_extension_flag*/
-    bits_write(&bitsBuffer, 8, 10);    /*header_data_length*/
+    bits_write(&bitsBuffer, 8, 5);    /*header_data_length*/
     // 指出包含在 PES 分组标题中的可选字段和任何填充字节所占用的总字节数。该字段之前
     //的字节指出了有无可选字段。
 
-    /*PTS,DTS*/
+
+
     bits_write(&bitsBuffer, 4, 3);                    /*'0011'*/
     bits_write(&bitsBuffer, 3, ((pts) >> 30) & 0x07);     /*PTS[32..30]*/
     bits_write(&bitsBuffer, 1, 1);
@@ -267,13 +276,15 @@ int gb28181_make_pes_header(char* pData, int stream_id, int payload_len, unsigne
     bits_write(&bitsBuffer, 1, 1);
     bits_write(&bitsBuffer, 15, (pts) & 0x7FFF);          /*PTS[14..0]*/
     bits_write(&bitsBuffer, 1, 1);
-    bits_write(&bitsBuffer, 4, 1);                    /*'0001'*/
-    bits_write(&bitsBuffer, 3, ((dts) >> 30) & 0x07);     /*DTS[32..30]*/
-    bits_write(&bitsBuffer, 1, 1);
-    bits_write(&bitsBuffer, 15, ((dts) >> 15) & 0x7FFF);    /*DTS[29..15]*/
-    bits_write(&bitsBuffer, 1, 1);
-    bits_write(&bitsBuffer, 15, (dts) & 0x7FFF);          /*DTS[14..0]*/
-    bits_write(&bitsBuffer, 1, 1);
+
+
+//    bits_write(&bitsBuffer, 4, 1);                    /*'0001'*/
+//    bits_write(&bitsBuffer, 3, ((dts) >> 30) & 0x07);     /*DTS[32..30]*/
+//    bits_write(&bitsBuffer, 1, 1);
+//    bits_write(&bitsBuffer, 15, ((dts) >> 15) & 0x7FFF);    /*DTS[29..15]*/
+//    bits_write(&bitsBuffer, 1, 1);
+//    bits_write(&bitsBuffer, 15, (dts) & 0x7FFF);          /*DTS[14..0]*/
+//    bits_write(&bitsBuffer, 1, 1);
     return 0;
 }
 
@@ -300,13 +311,6 @@ int gb28181_make_rtp_header(char* pData, int marker_flag, unsigned short cseq, l
     return 0;
 }
 
-//extern "C" JNIEXPORT jstring JNICALL
-//Java_com_zbgd_zbgd_1platform_LoginActivity_stringFromJNI(
-//        JNIEnv* env,
-//        jobject /* this */) {
-//    std::string hello = "Hello from C++";
-//    return env->NewStringUTF(hello.c_str());
-//}
 extern "C" JNIEXPORT jbyteArray JNICALL
 Java_com_rust_sip_GB28181_tools_PSmuxer_getHeader(JNIEnv* env,jobject ,jint len, jlong times,jint isKeyFrame){
     char szTempPacketHead[256];
@@ -329,7 +333,7 @@ extern "C" JNIEXPORT jbyteArray JNICALL
 Java_com_rust_sip_GB28181_tools_PSmuxer_getPESHeader(JNIEnv *env,jobject,jint stream_id,jint payloadLen,jint streaType,jlong times){
     char szTempPacketHead[256];
     memset(szTempPacketHead, 0, 256);
-    gb28181_make_pes_header(szTempPacketHead, streaType ? 0xC0 : 0xE0, payloadLen, times / 100, times / 300);
+    gb28181_make_pes_header(szTempPacketHead, streaType ? 0xC0 : 0xE0, payloadLen, times / 100, times / 100);
     jbyteArray back=env->NewByteArray(256);
     env->SetByteArrayRegion(back,0,256,(jbyte *)szTempPacketHead);
     return back;
