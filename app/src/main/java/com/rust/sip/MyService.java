@@ -6,7 +6,6 @@ import android.content.Intent;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
-import android.hardware.camera2.CameraManager;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
