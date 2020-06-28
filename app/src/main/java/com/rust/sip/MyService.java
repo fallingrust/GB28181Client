@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
+import android.hardware.camera2.CameraManager;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
@@ -186,8 +187,8 @@ public class MyService extends Service implements SipProviderListener {
     }
 
     public void InitCamera(){
-        mPreviewData=new byte[GB28181Params.getCameraWidth()*GB28181Params.getCameraHeigth()*3/2];
-        if(GB28181Params.getmCamera()==null){
+        mPreviewData = new byte[GB28181Params.getCameraWidth() * GB28181Params.getCameraHeigth() * 3 / 2];
+        if(GB28181Params.getmCamera() == null){
             GB28181Params.setmCamera(android.hardware.Camera.open(Camera.CameraInfo.CAMERA_FACING_BACK));
         }
         GB28181Params.getmCamera().setDisplayOrientation(90);
@@ -286,23 +287,29 @@ public class MyService extends Service implements SipProviderListener {
             input=yuv420sp;
             int inputBufferIndex=mediaCodec.dequeueInputBuffer(-1);
             ByteBuffer inputBuffer=mediaCodec.getInputBuffer(inputBufferIndex);
+            if(inputBuffer == null){
+                return null;
+            }
             inputBuffer.clear();
             inputBuffer.put(input);
 
             mediaCodec.queueInputBuffer(inputBufferIndex,0,input.length,132+1000000*count/25,0);
             count++;
             MediaCodec.BufferInfo bufferInfo=new MediaCodec.BufferInfo();
-            int outputBufferIndex=mediaCodec.dequeueOutputBuffer(bufferInfo,0);
-            while(outputBufferIndex>=0){
-                ByteBuffer outputBuffer=mediaCodec.getOutputBuffer(outputBufferIndex);
-                byte[] outData=new byte[outputBuffer.remaining()];
+            int outputBufferIndex = mediaCodec.dequeueOutputBuffer(bufferInfo,0);
+            while(outputBufferIndex >= 0){
+                ByteBuffer outputBuffer = mediaCodec.getOutputBuffer(outputBufferIndex);
+                if(outputBuffer == null ){
+                    return  null;
+                }
+                byte[] outData = new byte[outputBuffer.remaining()];
                 outputBuffer.get(outData,0,outData.length);
-                if(bufferInfo.flags==MediaCodec.BUFFER_FLAG_CODEC_CONFIG){
+                if(bufferInfo.flags == MediaCodec.BUFFER_FLAG_CODEC_CONFIG){
                     configByte=new byte[bufferInfo.size];
                     configByte=outData;
                 }
-                if(bufferInfo.flags==MediaCodec.BUFFER_FLAG_KEY_FRAME){
-                    byte[] keyframe=new byte[bufferInfo.size+configByte.length];
+                if(bufferInfo.flags == MediaCodec.BUFFER_FLAG_KEY_FRAME){
+                    byte[] keyframe = new byte[bufferInfo.size+configByte.length];
                     System.arraycopy(configByte,0,keyframe,0,configByte.length);
                     System.arraycopy(outData,0,keyframe,configByte.length,outData.length);
                     mediaCodec.releaseOutputBuffer(outputBufferIndex,false);
@@ -318,24 +325,23 @@ public class MyService extends Service implements SipProviderListener {
     }
 
     private List<byte[]> SplitByteArray(byte[] input,int size){
-        List<byte[]> result = new ArrayList<byte[]>();
+        List<byte[]> result = new ArrayList<>();
         int length = input.length;
         int count = length / size;
         int r = length % size;
 
-        for(int i=0;i<count;i++){
-            byte[] newbyteArray=new byte[size];
-            System.arraycopy(input,size*i,newbyteArray,0,size);
-            result.add(newbyteArray);
+        for(int i = 0;i < count;i++){
+            byte[] newByteArray=new byte[size];
+            System.arraycopy(input,size*i,newByteArray,0,size);
+            result.add(newByteArray);
         }
-        if(r!=0){
-            byte[] newbyteArray=new byte[r];
-            System.arraycopy(input,length-r,newbyteArray,0,r);
-            result.add(newbyteArray);
+        if(r != 0){
+            byte[] newByteArray=new byte[r];
+            System.arraycopy(input,length-r,newByteArray,0,r);
+            result.add(newByteArray);
         }
         return result;
     }
-    private long pts;
     class SendMediaThread extends Thread{
         @SuppressLint("HandlerLeak")
         @Override
@@ -343,110 +349,99 @@ public class MyService extends Service implements SipProviderListener {
             Looper.prepare();
             handler=new Handler(){
                 public void handleMessage(android.os.Message msg){
-                    switch (msg.what){
-                        case 0:
-                            byte[] raw=EncodeH264(mPreviewData);
-                            if(raw!=null){
-                                int index = 0;
-                                int length = 0;
-                                List<byte[]> list = new ArrayList<>();
-                                byte[] naul;
-                                //获取一帧H264所有的NAUL
-                                for (int i = index + 3; i < raw.length - 3; i++)
-                                {
-                                    if ((raw[i] == 0x00 && raw[i + 1] == 0x00 && raw[i + 2] == 0x00 && raw[i + 3] == 0x01))
-                                    {
-                                        length = i - index - 4;
-                                        naul = new byte[length];
-                                        System.arraycopy(raw, index + 4, naul, 0, length);
-                                        list.add(naul);
-                                        index += length + 4;
-                                    }
-                                    if (i == raw.length - 3 - 1)
-                                    {
-                                        naul = new byte[raw.length - index - 4];
-                                        System.arraycopy(raw, index + 4, naul, 0, naul.length);
-                                        list.add(naul);
-                                    }
+                    if (msg.what == 0) {
+                        byte[] raw = EncodeH264(mPreviewData);
+                        if (raw != null) {
+                            int index = 0;
+                            int length;
+                            List<byte[]> list = new ArrayList<>();
+                            byte[] naul;
+                            //获取一帧H264所有的naul
+                            for (int i = index + 3; i < raw.length - 3; i++) {
+                                if ((raw[i] == 0x00 && raw[i + 1] == 0x00 && raw[i + 2] == 0x00 && raw[i + 3] == 0x01)) {
+                                    length = i - index - 4;
+                                    naul = new byte[length];
+                                    System.arraycopy(raw, index + 4, naul, 0, length);
+                                    list.add(naul);
+                                    index += length + 4;
                                 }
-                                Log.e(TAG, "handleMessage: "+list.size()+"" );
-                                byte[] psH;
-                                if(list.size()==3){
-                                    psH=PSmuxer.GetPSHeader(0,time,1);
-                                }else{
-                                    psH=PSmuxer.GetPSHeader(0,time,0);
+                                if (i == raw.length - 3 - 1) {
+                                    naul = new byte[raw.length - index - 4];
+                                    System.arraycopy(raw, index + 4, naul, 0, naul.length);
+                                    list.add(naul);
                                 }
-                                byte[] Temp = new byte[psH.length + 14 * list.size() + raw.length];
-                                byte[] startcode = new byte[] { 0x00, 0x00, 0x00, 0x01 };
-                                long pts = 132 + 1000000 * cseq / 25 ;
-                                switch (list.size())
-                                {
-                                    case 1:
-                                        byte[] pesh = PSmuxer.GetPESHeader(list.get(0).length + startcode.length,0,pts);
-                                        System.arraycopy(psH, 0, Temp, 0, psH.length);
-                                        System.arraycopy(pesh, 0, Temp, psH.length, pesh.length);
-                                        System.arraycopy(startcode, 0, Temp, psH.length + pesh.length, startcode.length);
-                                        System.arraycopy(list.get(0), 0, Temp, psH.length + pesh.length + 4, list.get(0).length);
-                                        break;
-                                    case 2:
-                                        byte[] pesh_SPS = PSmuxer.GetPESHeader(list.get(0).length + startcode.length, 0, pts);
-                                        byte[] pesh_PPS = PSmuxer.GetPESHeader( list.get(1).length + startcode.length, 0, pts);
-                                        System.arraycopy(psH, 0, Temp, 0, psH.length);
-                                        System.arraycopy(pesh_SPS, 0, Temp, psH.length, pesh_SPS.length);
-                                        System.arraycopy(startcode, 0, Temp, psH.length + pesh_SPS.length, startcode.length);
-                                        System.arraycopy(list.get(0), 0, Temp, psH.length + pesh_SPS.length + 4, list.get(0).length);
-                                        System.arraycopy(pesh_PPS, 0, Temp, psH.length + pesh_SPS.length + list.get(0).length + 4, pesh_PPS.length);
-                                        System.arraycopy(startcode, 0, Temp, psH.length + pesh_SPS.length + list.get(0).length + 4 + pesh_PPS.length, startcode.length);
-                                        System.arraycopy(list.get(1), 0, Temp, psH.length + pesh_SPS.length + 4 + list.get(0).length + pesh_PPS.length + 4, list.get(1).length);
-                                        break;
-                                    case 3:
-                                        byte[] pesH_SPS = PSmuxer.GetPESHeader( list.get(0).length + startcode.length, 0, pts);
-                                        byte[] pesH_PPS = PSmuxer.GetPESHeader( list.get(1).length + startcode.length, 0, pts);
-                                        byte[] pesH_RAW = PSmuxer.GetPESHeader( list.get(2).length + startcode.length, 0, pts);
-                                        System.arraycopy(psH, 0, Temp, 0, psH.length);
-                                        System.arraycopy(pesH_SPS, 0, Temp, psH.length, pesH_SPS.length);
-                                        System.arraycopy(startcode, 0, Temp, psH.length + pesH_SPS.length, startcode.length);
-                                        System.arraycopy(list.get(0), 0, Temp, psH.length + pesH_SPS.length + 4, list.get(0).length);
-                                        System.arraycopy(pesH_PPS, 0, Temp, psH.length + pesH_SPS.length + 4 + list.get(0).length, pesH_PPS.length);
-                                        System.arraycopy(startcode, 0, Temp, psH.length + pesH_SPS.length + 4 + list.get(0).length + pesH_PPS.length, startcode.length);
-                                        System.arraycopy(list.get(1), 0, Temp, psH.length + pesH_SPS.length + 4 + list.get(0).length + pesH_PPS.length + 4, list.get(1).length);
-                                        System.arraycopy(pesH_RAW, 0, Temp, psH.length + pesH_SPS.length + 4 + list.get(0).length + pesH_PPS.length + 4 + list.get(1).length, pesH_RAW.length);
-                                        System.arraycopy(startcode, 0, Temp, psH.length + pesH_SPS.length + 4 + list.get(0).length + pesH_PPS.length + 4 + list.get(1).length + pesH_RAW.length, startcode.length);
-                                        System.arraycopy(list.get(2), 0, Temp, psH.length + pesH_SPS.length + 4 + list.get(0).length + pesH_PPS.length + 4 + list.get(1).length + pesH_RAW.length + 4, list.get(2).length);
-                                        break;
-                                }
-
-                                List<byte[]> rtplist=SplitByteArray(Temp,1400);
-                                byte[] buf;
-                                for (int i = 0; i < rtplist.size(); i++)
-                                {
-                                    byte[] rtpH = PSmuxer.GetRtpHeader(0, cseq, time, ssrc);
-                                    byte[] rtpHend = PSmuxer.GetRtpHeader(1, cseq, time, ssrc);
-                                    if (i != rtplist.size() - 1)
-                                    {
-                                        buf = new byte[rtplist.get(i).length + 12];
-                                        System.arraycopy(rtpH, 0, buf, 0, rtpH.length);
-                                        System.arraycopy(rtplist.get(i), 0, buf, 12, rtplist.get(i).length);
-                                    }
-                                    else
-                                    {
-                                        buf = new byte[rtplist.get(i).length + 12];
-                                        System.arraycopy(rtpHend, 0, buf, 0, rtpHend.length);
-                                        System.arraycopy(rtplist.get(i), 0, buf, rtpHend.length, rtplist.get(i).length);
-                                    }
-                                    InetSocketAddress address=new InetSocketAddress(GB28181Params.getMediaServerIPAddress(),GB28181Params.getMediaServerPort());
-                                    DatagramPacket packet=new DatagramPacket(buf,buf.length,address);
-                                    try {
-                                        mediaSocket.send(packet);
-                                    }catch (IOException e){
-                                        e.printStackTrace();
-                                    }
-
-                                    cseq += 1;
-                                }
-                                time += 3600;
                             }
-                            break;
+                            Log.e(TAG, "handleMessage: " + list.size() + "");
+                            byte[] psH;
+                            if (list.size() == 3) {
+                                psH = PSmuxer.GetPSHeader(0, time, 1);
+                            } else {
+                                psH = PSmuxer.GetPSHeader(0, time, 0);
+                            }
+                            byte[] Temp = new byte[psH.length + 14 * list.size() + raw.length];
+                            byte[] startcode = new byte[]{0x00, 0x00, 0x00, 0x01};
+                            long pts = 132 + 1000000 * cseq / 25;
+                            switch (list.size()) {
+                                case 1:
+                                    byte[] pesh = PSmuxer.GetPESHeader(list.get(0).length + startcode.length, 0, pts);
+                                    System.arraycopy(psH, 0, Temp, 0, psH.length);
+                                    System.arraycopy(pesh, 0, Temp, psH.length, pesh.length);
+                                    System.arraycopy(startcode, 0, Temp, psH.length + pesh.length, startcode.length);
+                                    System.arraycopy(list.get(0), 0, Temp, psH.length + pesh.length + 4, list.get(0).length);
+                                    break;
+                                case 2:
+                                    byte[] pesh_SPS = PSmuxer.GetPESHeader(list.get(0).length + startcode.length, 0, pts);
+                                    byte[] pesh_PPS = PSmuxer.GetPESHeader(list.get(1).length + startcode.length, 0, pts);
+                                    System.arraycopy(psH, 0, Temp, 0, psH.length);
+                                    System.arraycopy(pesh_SPS, 0, Temp, psH.length, pesh_SPS.length);
+                                    System.arraycopy(startcode, 0, Temp, psH.length + pesh_SPS.length, startcode.length);
+                                    System.arraycopy(list.get(0), 0, Temp, psH.length + pesh_SPS.length + 4, list.get(0).length);
+                                    System.arraycopy(pesh_PPS, 0, Temp, psH.length + pesh_SPS.length + list.get(0).length + 4, pesh_PPS.length);
+                                    System.arraycopy(startcode, 0, Temp, psH.length + pesh_SPS.length + list.get(0).length + 4 + pesh_PPS.length, startcode.length);
+                                    System.arraycopy(list.get(1), 0, Temp, psH.length + pesh_SPS.length + 4 + list.get(0).length + pesh_PPS.length + 4, list.get(1).length);
+                                    break;
+                                case 3:
+                                    byte[] pesH_SPS = PSmuxer.GetPESHeader(list.get(0).length + startcode.length, 0, pts);
+                                    byte[] pesH_PPS = PSmuxer.GetPESHeader(list.get(1).length + startcode.length, 0, pts);
+                                    byte[] pesH_RAW = PSmuxer.GetPESHeader(list.get(2).length + startcode.length, 0, pts);
+                                    System.arraycopy(psH, 0, Temp, 0, psH.length);
+                                    System.arraycopy(pesH_SPS, 0, Temp, psH.length, pesH_SPS.length);
+                                    System.arraycopy(startcode, 0, Temp, psH.length + pesH_SPS.length, startcode.length);
+                                    System.arraycopy(list.get(0), 0, Temp, psH.length + pesH_SPS.length + 4, list.get(0).length);
+                                    System.arraycopy(pesH_PPS, 0, Temp, psH.length + pesH_SPS.length + 4 + list.get(0).length, pesH_PPS.length);
+                                    System.arraycopy(startcode, 0, Temp, psH.length + pesH_SPS.length + 4 + list.get(0).length + pesH_PPS.length, startcode.length);
+                                    System.arraycopy(list.get(1), 0, Temp, psH.length + pesH_SPS.length + 4 + list.get(0).length + pesH_PPS.length + 4, list.get(1).length);
+                                    System.arraycopy(pesH_RAW, 0, Temp, psH.length + pesH_SPS.length + 4 + list.get(0).length + pesH_PPS.length + 4 + list.get(1).length, pesH_RAW.length);
+                                    System.arraycopy(startcode, 0, Temp, psH.length + pesH_SPS.length + 4 + list.get(0).length + pesH_PPS.length + 4 + list.get(1).length + pesH_RAW.length, startcode.length);
+                                    System.arraycopy(list.get(2), 0, Temp, psH.length + pesH_SPS.length + 4 + list.get(0).length + pesH_PPS.length + 4 + list.get(1).length + pesH_RAW.length + 4, list.get(2).length);
+                                    break;
+                            }
+
+                            List<byte[]> rtplist = SplitByteArray(Temp, 1400);
+                            byte[] buf;
+                            for (int i = 0; i < rtplist.size(); i++) {
+                                byte[] rtpH = PSmuxer.GetRtpHeader(0, cseq, time, ssrc);
+                                byte[] rtpHend = PSmuxer.GetRtpHeader(1, cseq, time, ssrc);
+                                if (i != rtplist.size() - 1) {
+                                    buf = new byte[rtplist.get(i).length + 12];
+                                    System.arraycopy(rtpH, 0, buf, 0, rtpH.length);
+                                    System.arraycopy(rtplist.get(i), 0, buf, 12, rtplist.get(i).length);
+                                } else {
+                                    buf = new byte[rtplist.get(i).length + 12];
+                                    System.arraycopy(rtpHend, 0, buf, 0, rtpHend.length);
+                                    System.arraycopy(rtplist.get(i), 0, buf, rtpHend.length, rtplist.get(i).length);
+                                }
+                                InetSocketAddress address = new InetSocketAddress(GB28181Params.getMediaServerIPAddress(), GB28181Params.getMediaServerPort());
+                                DatagramPacket packet = new DatagramPacket(buf, buf.length, address);
+                                try {
+                                    mediaSocket.send(packet);
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
+                                cseq += 1;
+                            }
+                            time += 3600;
+                        }
                     }
                 }
             };
@@ -455,7 +450,7 @@ public class MyService extends Service implements SipProviderListener {
         }
     }
 
-    private TimerTask keepALiveTask=new TimerTask() {
+    private TimerTask keepALiveTask = new TimerTask() {
         @Override
         public void run() {
             GB28181_KeepAlive();
