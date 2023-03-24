@@ -64,6 +64,8 @@ public class MyService extends Service implements SipProviderListener {
     private int ssrc = 0;
     private long time=0;
     private int cseq = 0;
+
+    private int fps = 30;
     private DatagramSocket mediaSocket;
 
     @Nullable
@@ -94,15 +96,15 @@ public class MyService extends Service implements SipProviderListener {
     //region GB28181 部分
     /*国标模块参数初始化*/
     public void GB28181Init(){
-        GB28181Params.setSIPServerIPAddress("192.168.137.1");//SIP服务器地址
-        GB28181Params.setRemoteSIPServerPort(5060);//SIP服务器端口
-        GB28181Params.setLocalSIPIPAddress("192.168.137.72");//本机地址
+        GB28181Params.setSIPServerIPAddress("192.168.0.190");//SIP服务器地址
+        GB28181Params.setRemoteSIPServerPort(15060);//SIP服务器端口
+        GB28181Params.setLocalSIPIPAddress("192.168.0.219");//本机地址
         GB28181Params.setRemoteSIPServerID("34020000002000000001");
         GB28181Params.setRemoteSIPServerSerial("3402000000");
         GB28181Params.setLocalSIPPort(15061);//本机端口
         GB28181Params.setCameraHeigth(720);
         GB28181Params.setCameraWidth(1280);
-        GB28181Params.setPassword("123456");//密码
+        GB28181Params.setPassword("12345678");//密码
         GB28181Params.setLocalSIPDeviceId("340200000111000000002");
         GB28181Params.setLocalSIPMediaId("340200000132000000002");
         GB28181Params.setCurGBState(0);
@@ -192,9 +194,12 @@ public class MyService extends Service implements SipProviderListener {
         }
         GB28181Params.getmCamera().setDisplayOrientation(90);
         Camera.Parameters parameters=GB28181Params.getmCamera().getParameters();
+        List<int[]> fpsRange = parameters.getSupportedPreviewFpsRange();
         parameters.setPreviewFormat(ImageFormat.NV21);
         parameters.setPreviewSize(GB28181Params.getCameraWidth(),GB28181Params.getCameraHeigth());
         parameters.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE);
+        parameters.setPreviewFpsRange( fps *1000,fps *1000);
+
         GB28181Params.getmCamera().setParameters(parameters);
         Log.i("camera","CAMERA初始化");
         try{
@@ -212,8 +217,8 @@ public class MyService extends Service implements SipProviderListener {
             MediaFormat mediaFormat=MediaFormat.createVideoFormat("VIDEO/AVC",GB28181Params.getCameraWidth(),GB28181Params.getCameraHeigth());
             mediaFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar);
             mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE,GB28181Params.getCameraWidth()*GB28181Params.getCameraHeigth());
-            mediaFormat.setInteger(MediaFormat.KEY_FRAME_RATE,25);
-            mediaFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL,1);
+            mediaFormat.setInteger(MediaFormat.KEY_FRAME_RATE,fps);
+            mediaFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL,5);
             mediaCodec.configure(mediaFormat,null,null,MediaCodec.CONFIGURE_FLAG_ENCODE);
             Log.i("MediaCodec","MediaCodec编码器初始化");
             //mediaCodec.start();
@@ -292,7 +297,7 @@ public class MyService extends Service implements SipProviderListener {
             inputBuffer.clear();
             inputBuffer.put(input);
 
-            mediaCodec.queueInputBuffer(inputBufferIndex,0,input.length,132+1000000*count/25,0);
+            mediaCodec.queueInputBuffer(inputBufferIndex,0,input.length,132+1000000 * count / fps,0);
             count++;
             MediaCodec.BufferInfo bufferInfo=new MediaCodec.BufferInfo();
             int outputBufferIndex = mediaCodec.dequeueOutputBuffer(bufferInfo,0);
@@ -370,7 +375,7 @@ public class MyService extends Service implements SipProviderListener {
                                     list.add(naul);
                                 }
                             }
-                            Log.e(TAG, "handleMessage: " + list.size() + "");
+                            //Log.e(TAG, "handleMessage: " + list.size() + "");
                             byte[] psH;
                             if (list.size() == 3) {
                                 psH = PSmuxer.GetPSHeader(0, time, 1);
@@ -379,7 +384,8 @@ public class MyService extends Service implements SipProviderListener {
                             }
                             byte[] Temp = new byte[psH.length + 14 * list.size() + raw.length];
                             byte[] startcode = new byte[]{0x00, 0x00, 0x00, 0x01};
-                            long pts = 132 + 1000000 * cseq / 25;
+                            long pts = time;
+
                             switch (list.size()) {
                                 case 1:
                                     byte[] pesh = PSmuxer.GetPESHeader(list.get(0).length + startcode.length, 0, pts);
@@ -439,7 +445,7 @@ public class MyService extends Service implements SipProviderListener {
                                 }
                                 cseq += 1;
                             }
-                            time += 3600;
+                            time += (90000 / fps);
                         }
                     }
                 }
