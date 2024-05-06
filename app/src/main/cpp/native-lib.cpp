@@ -333,7 +333,7 @@ extern "C" JNIEXPORT jbyteArray JNICALL
 Java_com_rust_sip_GB28181_tools_PSmuxer_getPESHeader(JNIEnv *env,jobject,jint stream_id,jint payloadLen,jint streaType,jlong times){
     char szTempPacketHead[256];
     memset(szTempPacketHead, 0, 256);
-    gb28181_make_pes_header(szTempPacketHead, streaType ? 0xC0 : 0xE0, payloadLen, times / 100, times / 100);
+    gb28181_make_pes_header(szTempPacketHead, streaType ? 0xC0 : 0xE0, payloadLen, times, times);
     jbyteArray back=env->NewByteArray(256);
     env->SetByteArrayRegion(back,0,256,(jbyte *)szTempPacketHead);
     return back;
